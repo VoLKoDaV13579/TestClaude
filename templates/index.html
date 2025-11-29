@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav>
+        <div class="container">
+            <h1>FinApp</h1>
+            <div>
+                <a href="/login">Login</a>
+                <a href="/register">Register</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="hero">
+            <h2>Welcome to FinApp</h2>
+            <p>Your secure financial management platform</p>
+            <p>Manage your accounts with enterprise-grade security</p>
+            <div style="margin-top: 2rem;">
+                <a href="/register" class="btn">Get Started</a>
+                <a href="/login" class="btn btn-secondary" style="margin-left: 1rem;">Login</a>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3 style="margin-bottom: 1rem;">Features</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 2rem;">
+                <div>
+                    <h4>🔒 Secure Authentication</h4>
+                    <p>Industry-standard JWT authentication with bcrypt password hashing</p>
+                </div>
+                <div>
+                    <h4>💰 Account Management</h4>
+                    <p>Create and manage multiple accounts with different currencies</p>
+                </div>
+                <div>
+                    <h4>📊 Real-time Updates</h4>
+                    <p>Track your balances and transactions in real-time</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
