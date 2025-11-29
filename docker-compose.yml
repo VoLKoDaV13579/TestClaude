@@ -17,6 +17,36 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - finapp-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: finapp_server
+    environment:
+      SERVER_PORT: 8080
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: finapp
+      JWT_SECRET: your-secret-key-change-this-in-production
+      SESSION_TIMEOUT: 24h
+      GIN_MODE: release
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - finapp-network
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+
+networks:
+  finapp-network:
+    driver: bridge
