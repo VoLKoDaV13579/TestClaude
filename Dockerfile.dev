@@ -1,0 +1,94 @@
+# =============================================================================
+# Development Dockerfile for Laravel 12 + RoadRunner
+# =============================================================================
+FROM php:8.4-cli-bookworm
+
+LABEL maintainer="devops@example.com"
+LABEL description="Laravel 12 development image with RoadRunner and Xdebug"
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libpq-dev \
+        libicu-dev \
+        libzip-dev \
+        libonig-dev \
+        zip \
+        unzip \
+        curl \
+        git \
+        vim \
+        procps \
+        htop \
+        net-tools \
+        iproute2 \
+        postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install PHP extensions
+RUN docker-php-ext-configure intl \
+    && docker-php-ext-install -j$(nproc) \
+        pdo_pgsql \
+        pgsql \
+        pcntl \
+        sockets \
+        intl \
+        opcache \
+        bcmath \
+        zip
+
+# Install PECL extensions
+RUN pecl install redis xdebug \
+    && docker-php-ext-enable redis xdebug
+
+# Configure Xdebug
+RUN { \
+    echo 'xdebug.mode=develop,debug,coverage'; \
+    echo 'xdebug.start_with_request=trigger'; \
+    echo 'xdebug.discover_client_host=true'; \
+    echo 'xdebug.client_host=host.docker.internal'; \
+    echo 'xdebug.client_port=9003'; \
+    echo 'xdebug.log_level=0'; \
+    echo 'xdebug.idekey=PHPSTORM'; \
+    } > /usr/local/etc/php/conf.d/xdebug.ini
+
+# Configure OPcache for development (with revalidation)
+RUN { \
+    echo 'opcache.enable=1'; \
+    echo 'opcache.memory_consumption=256'; \
+    echo 'opcache.interned_strings_buffer=16'; \
+    echo 'opcache.max_accelerated_files=20000'; \
+    echo 'opcache.validate_timestamps=1'; \
+    echo 'opcache.revalidate_freq=0'; \
+    } > /usr/local/etc/php/conf.d/opcache-dev.ini
+
+# Configure PHP for development
+RUN { \
+    echo 'memory_limit=512M'; \
+    echo 'post_max_size=128M'; \
+    echo 'upload_max_filesize=128M'; \
+    echo 'display_errors=On'; \
+    echo 'display_startup_errors=On'; \
+    echo 'error_reporting=E_ALL'; \
+    echo 'log_errors=On'; \
+    echo 'error_log=/dev/stderr'; \
+    } > /usr/local/etc/php/conf.d/php-dev.ini
+
+# Install Composer
+COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
+
+# Install RoadRunner
+COPY --from=ghcr.io/roadrunner-server/roadrunner:2024 /usr/bin/rr /usr/local/bin/rr
+
+# Create non-root user
+RUN groupadd -r app && useradd -r -g app -d /app -s /bin/bash -m app
+
+WORKDIR /app
+
+# Set ownership
+RUN chown -R app:app /app
+
+USER app
+
+EXPOSE 8080 2112 2114
+
+CMD ["rr", "serve", "-c", ".rr.yaml", "-o", "http.pool.debug=true"]

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpmnd>
+    <directories>
+        <directory>app</directory>
+        <directory>modules</directory>
+    </directories>
+
+    <exclude-directories>
+        <exclude-directory>vendor</exclude-directory>
+        <exclude-directory>storage</exclude-directory>
+        <exclude-directory>tests</exclude-directory>
+        <exclude-directory>database</exclude-directory>
+        <exclude-directory>bootstrap</exclude-directory>
+    </exclude-directories>
+
+    <extensions>
+        <extension>argument</extension>
+        <extension>array</extension>
+        <extension>assign</extension>
+        <extension>condition</extension>
+        <extension>default_parameter</extension>
+        <extension>operation</extension>
+        <extension>property</extension>
+        <extension>return</extension>
+        <extension>switch_case</extension>
+    </extensions>
+
+    <!-- Ignore common numbers that are not truly "magic" -->
+    <ignore-numbers>
+        <ignore-number>0</ignore-number>
+        <ignore-number>1</ignore-number>
+        <ignore-number>2</ignore-number>
+        <ignore-number>100</ignore-number>
+    </ignore-numbers>
+
+    <!-- Ignore strings used as array keys -->
+    <ignore-funcs>
+        <ignore-func>intdiv</ignore-func>
+        <ignore-func>round</ignore-func>
+        <ignore-func>ceil</ignore-func>
+        <ignore-func>floor</ignore-func>
+        <ignore-func>array_chunk</ignore-func>
+        <ignore-func>str_pad</ignore-func>
+        <ignore-func>str_repeat</ignore-func>
+    </ignore-funcs>
+
+    <allow-array-mapping>true</allow-array-mapping>
+    <include-numeric-string>false</include-numeric-string>
+</phpmnd>

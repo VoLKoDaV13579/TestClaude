@@ -1,44 +1,76 @@
-.PHONY: help run build test clean docker-up docker-down docker-build docker-logs docker-restart
+# =============================================================================
+# Laravel 12 + RoadRunner Development Makefile
+# =============================================================================
 
-help:
-	@echo "Available commands:"
-	@echo "  make run             - Run the application locally"
-	@echo "  make build           - Build the application binary"
-	@echo "  make test            - Run tests"
-	@echo "  make clean           - Clean build artifacts"
-	@echo "  make docker-build    - Build Docker images"
-	@echo "  make docker-up       - Start all services with Docker Compose"
-	@echo "  make docker-down     - Stop Docker Compose services"
-	@echo "  make docker-logs     - Show logs from all services"
-	@echo "  make docker-restart  - Restart all Docker services"
+.DEFAULT_GOAL := help
+COMPOSE := docker compose
+EXEC := $(COMPOSE) exec app
+PHP := $(EXEC) php
+COMPOSER := $(EXEC) composer
 
-run:
-	go run cmd/server/main.go
+.PHONY: help up down build test lint stan rector cs-fix cs-check phpmd phpmnd deptrac quality migrate fresh shell logs restart
 
-build:
-	go build -o bin/finapp cmd/server/main.go
+## ── Docker ──────────────────────────────────────────────────────────────────
 
-test:
-	go test -v ./...
+help: ## Show this help message
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
+		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-clean:
-	rm -rf bin/
-	go clean
+up: ## Start all services in detached mode
+	$(COMPOSE) up -d
 
-docker-build:
-	docker-compose build
+down: ## Stop and remove all services
+	$(COMPOSE) down
 
-docker-up:
-	docker-compose up -d
-	@echo "Services are starting..."
-	@echo "PostgreSQL will be available at localhost:5432"
-	@echo "Application will be available at http://localhost:8080"
+build: ## Rebuild all Docker images
+	$(COMPOSE) build --no-cache
 
-docker-down:
-	docker-compose down
+restart: ## Restart all services
+	$(COMPOSE) restart
 
-docker-logs:
-	docker-compose logs -f
+logs: ## Tail logs from all services
+	$(COMPOSE) logs -f --tail=100
 
-docker-restart:
-	docker-compose restart
+shell: ## Open a shell in the app container
+	$(EXEC) bash
+
+## ── Testing ─────────────────────────────────────────────────────────────────
+
+test: ## Run PHPUnit test suite
+	$(PHP) artisan test --parallel
+
+## ── Code Quality ────────────────────────────────────────────────────────────
+
+lint: ## Run PHP syntax linter
+	$(EXEC) find app config routes database modules -name "*.php" -print0 | xargs -0 -n1 php -l
+
+stan: ## Run PHPStan static analysis
+	$(PHP) vendor/bin/phpstan analyse --memory-limit=512M
+
+rector: ## Run Rector refactoring (dry-run)
+	$(PHP) vendor/bin/rector process --dry-run
+
+cs-fix: ## Fix code style with PHP-CS-Fixer
+	$(PHP) vendor/bin/php-cs-fixer fix
+
+cs-check: ## Check code style with PHP-CS-Fixer (no changes)
+	$(PHP) vendor/bin/php-cs-fixer fix --dry-run --diff
+
+phpmd: ## Run PHP Mess Detector
+	$(PHP) vendor/bin/phpmd app,modules text phpmd.xml
+
+phpmnd: ## Run PHP Magic Number Detector
+	$(PHP) vendor/bin/phpmnd app modules --exclude=vendor --non-zero-exit-on-violation
+
+deptrac: ## Run Deptrac dependency analysis
+	$(PHP) vendor/bin/deptrac analyse --config-file=deptrac.yaml
+
+quality: lint stan cs-check phpmd phpmnd deptrac ## Run all code quality checks
+
+## ── Database ────────────────────────────────────────────────────────────────
+
+migrate: ## Run database migrations
+	$(PHP) artisan migrate --force
+
+fresh: ## Drop all tables and re-run migrations with seeders
+	$(PHP) artisan migrate:fresh --seed

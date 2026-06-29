@@ -1,0 +1,112 @@
+deptrac:
+  paths:
+    - modules
+    - app
+
+  layers:
+    # Domain Layer - Pure business logic, entities, value objects
+    - name: Domain
+      collectors:
+        - type: directory
+          value: modules/*/Domain/.*
+
+    # Application Layer - Use cases, commands, queries, DTOs
+    - name: Application
+      collectors:
+        - type: directory
+          value: modules/*/Application/.*
+
+    # Infrastructure Layer - Repositories, external services, persistence
+    - name: Infrastructure
+      collectors:
+        - type: directory
+          value: modules/*/Infrastructure/.*
+
+    # Presentation Layer - Controllers, requests, resources, middleware
+    - name: Presentation
+      collectors:
+        - type: directory
+          value: modules/*/Presentation/.*
+
+    # Shared Kernel - Shared contracts and interfaces across modules
+    - name: SharedKernel
+      collectors:
+        - type: directory
+          value: modules/Shared/.*
+
+    # User Module
+    - name: UserModule
+      collectors:
+        - type: directory
+          value: modules/User/.*
+
+    # Order Module
+    - name: OrderModule
+      collectors:
+        - type: directory
+          value: modules/Order/.*
+
+    # Laravel App Layer (controllers, providers, etc.)
+    - name: LaravelApp
+      collectors:
+        - type: directory
+          value: app/.*
+
+  ruleset:
+    # Domain depends on nothing (pure, no framework dependencies)
+    Domain:
+      - SharedKernel
+
+    # Application depends only on Domain
+    Application:
+      - Domain
+      - SharedKernel
+
+    # Infrastructure depends on Domain and Application
+    Infrastructure:
+      - Domain
+      - Application
+      - SharedKernel
+
+    # Presentation depends on Application (never directly on Domain or Infrastructure)
+    Presentation:
+      - Application
+      - SharedKernel
+
+    # Shared Kernel has no dependencies on specific modules
+    SharedKernel: []
+
+    # Module boundary rules:
+    # User module can access Shared but not Order internals
+    UserModule:
+      - SharedKernel
+
+    # Order module can access Shared but not User internals
+    OrderModule:
+      - SharedKernel
+
+    # Laravel App can depend on Presentation and Application layers
+    LaravelApp:
+      - Presentation
+      - Application
+      - Infrastructure
+      - SharedKernel
+
+  skip_violations:
+    # Temporary violations to be resolved over time
+    # Example:
+    # App\Providers\AppServiceProvider:
+    #   - Modules\User\Infrastructure\Providers\UserServiceProvider
+
+  formatters:
+    graphviz:
+      hidden_layers:
+        - LaravelApp
+      groups:
+        Module Layers:
+          - Domain
+          - Application
+          - Infrastructure
+          - Presentation
+        Cross-cutting:
+          - SharedKernel

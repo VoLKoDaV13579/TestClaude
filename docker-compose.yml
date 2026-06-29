@@ -1,52 +1,197 @@
-version: '3.8'
-
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: finapp_postgres
+  # ===========================================================================
+  # Application
+  # ===========================================================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8080:8080"
+      - "2112:2112"
+      - "2114:2114"
+    volumes:
+      - .:/app
+      - composer_cache:/home/app/.composer/cache
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: finapp
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_KEY: "${APP_KEY}"
+      APP_URL: http://localhost:8080
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: app
+      DB_USERNAME: app
+      DB_PASSWORD: secret
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CACHE_STORE: redis
+      SESSION_DRIVER: redis
+      QUEUE_CONNECTION: roadrunner
+      TEMPORAL_ADDRESS: temporal:7233
+      SENTRY_LARAVEL_DSN: "${SENTRY_DSN:-}"
+      XDEBUG_MODE: "${XDEBUG_MODE:-off}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+    networks:
+      - app-network
+
+  # ===========================================================================
+  # PostgreSQL
+  # NOTE: Target version is PostgreSQL 18.1. Using 17 as 18.x images are not
+  #       yet available on Docker Hub.
+  # ===========================================================================
+  postgres:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: app
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: secret
+      PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
     networks:
-      - finapp-network
+      - app-network
 
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: finapp_server
-    environment:
-      SERVER_PORT: 8080
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: finapp
-      JWT_SECRET: your-secret-key-change-this-in-production
-      SESSION_TIMEOUT: 24h
-      GIN_MODE: release
+  # ===========================================================================
+  # Redis
+  # NOTE: Target version is Redis 8.6. Using redis:7-alpine as the closest
+  #       available stable image.
+  # ===========================================================================
+  redis:
+    image: redis:7-alpine
     ports:
-      - "8080:8080"
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - app-network
+
+  # ===========================================================================
+  # Temporal Server (workflow engine)
+  # ===========================================================================
+  temporal:
+    image: temporalio/auto-setup:latest
+    environment:
+      DB: postgres12_pgx
+      DB_PORT: 5432
+      POSTGRES_USER: app
+      POSTGRES_PWD: secret
+      POSTGRES_SEEDS: postgres
+      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
+    ports:
+      - "7233:7233"
     depends_on:
       postgres:
         condition: service_healthy
     networks:
-      - finapp-network
-    restart: unless-stopped
+      - app-network
+
+  temporal-ui:
+    image: temporalio/ui:latest
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:8080
+    ports:
+      - "8233:8233"
+    depends_on:
+      - temporal
+    networks:
+      - app-network
+
+  temporal-admin-tools:
+    image: temporalio/admin-tools:latest
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+    depends_on:
+      - temporal
+    networks:
+      - app-network
+    stdin_open: true
+    tty: true
+
+  # ===========================================================================
+  # Monitoring: Prometheus
+  # ===========================================================================
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    networks:
+      - app-network
+
+  # ===========================================================================
+  # Monitoring: Grafana
+  # ===========================================================================
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - app-network
+
+  # ===========================================================================
+  # Sentry
+  # Self-hosted Sentry is complex (20+ services). Using Sentry SaaS is
+  # strongly recommended for most teams. Set SENTRY_DSN in your .env file
+  # to point to your Sentry project DSN.
+  #
+  # If you must self-host, see: https://github.com/getsentry/self-hosted
+  # ===========================================================================
 
 volumes:
   postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  composer_cache:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
 
 networks:
-  finapp-network:
+  app-network:
     driver: bridge

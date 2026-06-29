@@ -1,0 +1,235 @@
+stages:
+  - lint
+  - analyze
+  - test
+  - build
+  - deploy-staging
+  - deploy-production
+
+variables:
+  PHP_IMAGE: php:8.4-cli
+  POSTGRES_DB: testing
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: secret
+  POSTGRES_HOST: postgres
+  REDIS_HOST: redis
+  COMPOSER_HOME: $CI_PROJECT_DIR/.composer
+  GCR_REGISTRY: $GCP_REGION-docker.pkg.dev/$GCP_PROJECT_ID/app
+  HELM_RELEASE_NAME: laravel-app
+
+default:
+  image: $PHP_IMAGE
+  before_script:
+    - apt-get update -yqq && apt-get install -yqq git unzip libpq-dev libzip-dev
+    - docker-php-ext-install pdo_pgsql zip pcntl sockets
+    - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+    - composer install --prefer-dist --no-progress --no-interaction
+
+cache:
+  key: composer-$CI_COMMIT_REF_SLUG
+  paths:
+    - vendor/
+    - $COMPOSER_HOME/cache/
+
+# ---------------------------------------------------------------------------
+# Lint Stage
+# ---------------------------------------------------------------------------
+
+php-cs-fixer:
+  stage: lint
+  script:
+    - vendor/bin/php-cs-fixer fix --dry-run --diff --config=.php-cs-fixer.dist.php
+  allow_failure: false
+
+phpcs:
+  stage: lint
+  script:
+    - vendor/bin/phpcs --standard=phpcs.xml
+  allow_failure: false
+
+phpmd:
+  stage: lint
+  script:
+    - vendor/bin/phpmd app,modules xml phpmd.xml
+  allow_failure: false
+
+phpmnd:
+  stage: lint
+  script:
+    - vendor/bin/phpmnd app/ modules/ --xml-output=phpmnd-report.xml
+  artifacts:
+    paths:
+      - phpmnd-report.xml
+    when: always
+    expire_in: 7 days
+  allow_failure: true
+
+# ---------------------------------------------------------------------------
+# Analyze Stage
+# ---------------------------------------------------------------------------
+
+phpstan:
+  stage: analyze
+  script:
+    - vendor/bin/phpstan analyse --configuration=phpstan.neon --memory-limit=1G --error-format=gitlab > phpstan-report.json || true
+    - vendor/bin/phpstan analyse --configuration=phpstan.neon --memory-limit=1G
+  artifacts:
+    reports:
+      codequality: phpstan-report.json
+    expire_in: 7 days
+  allow_failure: false
+
+deptrac:
+  stage: analyze
+  script:
+    - vendor/bin/deptrac analyse --config-file=deptrac.yaml --formatter=gitlab-code-climate --output=deptrac-report.json || true
+    - vendor/bin/deptrac analyse --config-file=deptrac.yaml
+  artifacts:
+    reports:
+      codequality: deptrac-report.json
+    expire_in: 7 days
+  allow_failure: false
+
+rector:
+  stage: analyze
+  script:
+    - vendor/bin/rector process --dry-run --config=rector.php
+  allow_failure: false
+
+# ---------------------------------------------------------------------------
+# Test Stage
+# ---------------------------------------------------------------------------
+
+phpunit:
+  stage: test
+  services:
+    - name: postgres:17-alpine
+      alias: postgres
+    - name: redis:7-alpine
+      alias: redis
+  variables:
+    DB_CONNECTION: pgsql
+    DB_HOST: postgres
+    DB_PORT: "5432"
+    DB_DATABASE: testing
+    DB_USERNAME: postgres
+    DB_PASSWORD: secret
+    CACHE_DRIVER: redis
+    REDIS_HOST: redis
+    REDIS_PORT: "6379"
+  script:
+    - cp .env.example .env || true
+    - php artisan key:generate --force
+    - php artisan migrate --force --seed
+    - vendor/bin/phpunit --configuration=phpunit.xml --coverage-text --coverage-cobertura=coverage.xml --log-junit=junit-report.xml
+  coverage: '/^\s*Lines:\s*\d+.\d+\%/'
+  artifacts:
+    reports:
+      junit: junit-report.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    paths:
+      - coverage.xml
+      - junit-report.xml
+    when: always
+    expire_in: 30 days
+  allow_failure: false
+
+# ---------------------------------------------------------------------------
+# Build Stage
+# ---------------------------------------------------------------------------
+
+docker-build:
+  stage: build
+  image: docker:27
+  services:
+    - docker:27-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - echo "$GCP_SERVICE_KEY" | docker login -u _json_key --password-stdin https://$GCP_REGION-docker.pkg.dev
+  script:
+    - |
+      docker build \
+        --build-arg APP_ENV=production \
+        --tag $GCR_REGISTRY:$CI_COMMIT_SHA \
+        --tag $GCR_REGISTRY:$CI_COMMIT_REF_SLUG \
+        --tag $GCR_REGISTRY:latest \
+        --file Dockerfile \
+        .
+    - docker push $GCR_REGISTRY:$CI_COMMIT_SHA
+    - docker push $GCR_REGISTRY:$CI_COMMIT_REF_SLUG
+    - docker push $GCR_REGISTRY:latest
+  only:
+    - main
+    - staging
+    - tags
+  cache: {}
+
+# ---------------------------------------------------------------------------
+# Deploy Staging
+# ---------------------------------------------------------------------------
+
+deploy-staging:
+  stage: deploy-staging
+  image: google/cloud-sdk:latest
+  before_script:
+    - echo "$GCP_SERVICE_KEY" | gcloud auth activate-service-account --key-file=-
+    - gcloud config set project $GCP_PROJECT_ID
+    - gcloud container clusters get-credentials $GKE_CLUSTER --region $GCP_REGION
+    - curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  script:
+    - |
+      helm upgrade --install $HELM_RELEASE_NAME-staging ./infrastructure/helm \
+        --namespace staging \
+        --create-namespace \
+        --values infrastructure/helm/values.yaml \
+        --values infrastructure/helm/values-staging.yaml \
+        --set image.repository=$GCR_REGISTRY \
+        --set image.tag=$CI_COMMIT_SHA \
+        --set env.APP_ENV=staging \
+        --set env.SENTRY_DSN=$SENTRY_DSN \
+        --wait \
+        --timeout 600s
+  environment:
+    name: staging
+    url: https://staging.example.com
+  only:
+    - staging
+    - main
+  cache: {}
+
+# ---------------------------------------------------------------------------
+# Deploy Production
+# ---------------------------------------------------------------------------
+
+deploy-production:
+  stage: deploy-production
+  image: google/cloud-sdk:latest
+  before_script:
+    - echo "$GCP_SERVICE_KEY" | gcloud auth activate-service-account --key-file=-
+    - gcloud config set project $GCP_PROJECT_ID
+    - gcloud container clusters get-credentials $GKE_CLUSTER --region $GCP_REGION
+    - curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  script:
+    - |
+      helm upgrade --install $HELM_RELEASE_NAME ./infrastructure/helm \
+        --namespace production \
+        --create-namespace \
+        --values infrastructure/helm/values.yaml \
+        --values infrastructure/helm/values-production.yaml \
+        --set image.repository=$GCR_REGISTRY \
+        --set image.tag=$CI_COMMIT_SHA \
+        --set env.APP_ENV=production \
+        --set env.SENTRY_DSN=$SENTRY_DSN \
+        --wait \
+        --timeout 600s
+  environment:
+    name: production
+    url: https://app.example.com
+  when: manual
+  only:
+    - tags
+    - main
+  cache: {}
