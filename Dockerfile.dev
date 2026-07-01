@@ -87,8 +87,7 @@ WORKDIR /app
 # Set ownership
 RUN chown -R app:app /app
 
-COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh && chmod +x /usr/local/bin/entrypoint.sh
+RUN printf '#!/bin/bash\nset -e\ngit config --global --add safe.directory /app 2>/dev/null || true\nif [ ! -f /app/vendor/autoload.php ]; then\n  echo "Installing Composer dependencies..."\n  composer install --no-interaction --prefer-dist\nfi\nif [ -f /app/.env ] && grep -q "^APP_KEY=$" /app/.env; then\n  echo "Generating application key..."\n  php artisan key:generate --force\nfi\nexec "$@"\n' > /usr/local/bin/entrypoint.sh && chmod +x /usr/local/bin/entrypoint.sh
 
 USER app
 
