@@ -87,8 +87,11 @@ WORKDIR /app
 # Set ownership
 RUN chown -R app:app /app
 
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+
 USER app
 
 EXPOSE 8080 2112 2114
 
+ENTRYPOINT ["entrypoint.sh"]
 CMD ["rr", "serve", "-c", ".rr.yaml", "-o", "http.pool.debug=true"]
