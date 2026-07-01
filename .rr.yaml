@@ -14,17 +14,9 @@ http:
       X-Powered-By: "RoadRunner"
   pool:
     num_workers: 0
-    max_jobs: 64
+    max_jobs: 500
     allocate_timeout: 60s
     destroy_timeout: 60s
-
-jobs:
-  consume: ["default"]
-  pipelines:
-    default:
-      driver: memory
-      config:
-        priority: 10
 
 metrics:
   address: "0.0.0.0:2112"
