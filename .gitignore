@@ -1,11 +1,12 @@
 /vendor
+/rr
+/composer.lock
 /node_modules
 /.env
 /.env.backup
 /.env.production
 /.phpunit.result.cache
 /.php-cs-fixer.cache
-/phpstan.neon
 /storage/*.key
 /storage/framework/cache/data/*
 /storage/framework/sessions/*
