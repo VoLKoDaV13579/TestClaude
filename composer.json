@@ -36,7 +36,9 @@
     },
     "extra": {
         "laravel": {
-            "dont-discover": []
+            "dont-discover": [
+                "spiral/roadrunner-laravel"
+            ]
         }
     },
     "config": {

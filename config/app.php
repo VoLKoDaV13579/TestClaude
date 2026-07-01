@@ -16,10 +16,4 @@ return [
         'driver' => 'file',
     ],
 
-    'providers' => [
-        // Module Service Providers
-        Modules\User\Providers\UserServiceProvider::class,
-        Modules\Order\Providers\OrderServiceProvider::class,
-    ],
-
 ];
