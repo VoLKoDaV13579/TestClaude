@@ -1,0 +1,12 @@
+includes:
+    - vendor/phpstan/phpstan/conf/bleedingEdge.neon
+
+parameters:
+    level: 9
+    paths:
+        - app
+        - modules
+    excludePaths:
+        - vendor
+    checkGenericClassInNonGenericObjectType: false
+    reportUnmatchedIgnoredErrors: false
