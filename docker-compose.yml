@@ -12,7 +12,6 @@ services:
       - "2114:2114"
     volumes:
       - .:/app
-      - vendor_data:/app/vendor
       - composer_cache:/home/app/.composer/cache
     environment:
       APP_ENV: local
@@ -185,8 +184,6 @@ volumes:
   postgres_data:
     driver: local
   redis_data:
-    driver: local
-  vendor_data:
     driver: local
   composer_cache:
     driver: local
