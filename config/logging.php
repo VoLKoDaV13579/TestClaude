@@ -1,0 +1,42 @@
+<?php
+
+return [
+
+    'default' => env('LOG_CHANNEL', 'stderr'),
+
+    'deprecations' => [
+        'channel' => env('LOG_DEPRECATIONS_CHANNEL', 'null'),
+        'trace' => false,
+    ],
+
+    'channels' => [
+
+        'stack' => [
+            'driver' => 'stack',
+            'channels' => explode(',', env('LOG_STACK', 'stderr')),
+            'ignore_exceptions' => false,
+        ],
+
+        'stderr' => [
+            'driver' => 'monolog',
+            'level' => env('LOG_LEVEL', 'debug'),
+            'handler' => Monolog\Handler\StreamHandler::class,
+            'formatter' => env('LOG_STDERR_FORMATTER'),
+            'with' => [
+                'stream' => 'php://stderr',
+            ],
+            'processors' => [Monolog\Processor\PsrLogMessageProcessor::class],
+        ],
+
+        'sentry' => [
+            'driver' => 'sentry',
+        ],
+
+        'null' => [
+            'driver' => 'monolog',
+            'handler' => Monolog\Handler\NullHandler::class,
+        ],
+
+    ],
+
+];
