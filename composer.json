@@ -4,12 +4,12 @@
     "description": "Modular Monolith with DDD and Event Sourcing on Laravel 12",
     "license": "proprietary",
     "require": {
-        "php": "^8.5",
+        "php": "^8.4",
         "laravel/framework": "^12.0",
         "spatie/laravel-event-sourcing": "^7.0",
         "temporal/sdk": "^2.11",
         "spiral/roadrunner-laravel": "^6.0",
-        "spiral/roadrunner-http": "^4.0",
+        "spiral/roadrunner-http": "^3.0",
         "sentry/sentry-laravel": "^4.0",
         "spatie/laravel-prometheus": "^1.0",
         "predis/predis": "^2.0"

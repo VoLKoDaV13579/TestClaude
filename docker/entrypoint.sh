@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+git config --global --add safe.directory /app 2>/dev/null || true
+
 if [ ! -f /app/vendor/autoload.php ]; then
     echo "Installing Composer dependencies..."
     composer install --no-interaction --prefer-dist
